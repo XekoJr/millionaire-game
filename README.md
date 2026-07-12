@@ -49,5 +49,5 @@ frontend/
 ├── index.html, script.js          # home
 ├── play/                          # the quiz itself
 ├── questions/                     # question management UI
-└── highscore/                     # leaderboard
+└── highscore/                     # leaderboard 
 ```
