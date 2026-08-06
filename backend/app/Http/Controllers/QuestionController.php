@@ -22,7 +22,7 @@ class QuestionController extends Controller
                 return $query->where('difficulty', $difficulty);
             })->get();
 
-            return response()->json($questions);
+            return response()->json($questions->map(fn ($q) => $this->hideCorrect($q)));
         } catch (\Exception $e) {
             return response()->json(['error' => 'Could not fetch questions', 'message' => $this->safeMessage($e)], 500);
         }
@@ -38,10 +38,91 @@ class QuestionController extends Controller
                 return response()->json(['error' => 'Question not found'], 404);
             }
 
-            return response()->json($question);
+            return response()->json($this->hideCorrect($question));
         } catch (\Exception $e) {
             return response()->json(['error' => 'Could not fetch question', 'message' => $this->safeMessage($e)], 500);
         }
+    }
+
+    // Check a selected option server-side — gameplay never learns which
+    // option is correct from index/show, only from having actually answered.
+    public function checkAnswer(Request $request, $id)
+    {
+        try {
+            $validated = $request->validate([
+                'optionIndex' => 'required|integer|min:0|max:3',
+            ]);
+
+            $question = Question::find($id);
+            if (!$question) {
+                return response()->json(['error' => 'Question not found'], 404);
+            }
+
+            $options = $question->options;
+            $correctIndex = $this->correctIndex($options);
+
+            return response()->json([
+                'correct' => $validated['optionIndex'] === $correctIndex,
+                'correctIndex' => $correctIndex,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Could not check answer', 'message' => $this->safeMessage($e)], 500);
+        }
+    }
+
+    // Server-computed lifelines — "fifty" removes 2 random wrong options,
+    // "phone" reveals all wrong options (i.e. narrows it to the correct
+    // one), same behaviour the frontend used to compute itself by reading
+    // the (now-hidden) correct flag directly.
+    public function hint(Request $request, $id)
+    {
+        try {
+            $validated = $request->validate([
+                'type' => 'required|in:fifty,phone',
+            ]);
+
+            $question = Question::find($id);
+            if (!$question) {
+                return response()->json(['error' => 'Question not found'], 404);
+            }
+
+            $options = $question->options;
+            $correctIndex = $this->correctIndex($options);
+            $wrongIndexes = array_values(array_diff(range(0, count($options) - 1), [$correctIndex]));
+
+            if ($validated['type'] === 'fifty') {
+                shuffle($wrongIndexes);
+                $eliminate = array_slice($wrongIndexes, 0, 2);
+            } else {
+                $eliminate = $wrongIndexes;
+            }
+
+            return response()->json(['eliminate' => array_values($eliminate)]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Could not compute hint', 'message' => $this->safeMessage($e)], 500);
+        }
+    }
+
+    // Strips the `correct` flag from every option before a question is sent
+    // to a client that hasn't answered yet (index/show are public/unauthed).
+    private function hideCorrect(Question $question): array
+    {
+        $data = $question->toArray();
+        $data['options'] = array_map(function ($option) {
+            unset($option['correct']);
+            return $option;
+        }, $data['options']);
+        return $data;
+    }
+
+    private function correctIndex(array $options): int
+    {
+        foreach ($options as $index => $option) {
+            if ($option['correct'] === true) {
+                return $index;
+            }
+        }
+        throw new \Exception('Question has no correct option configured');
     }
 
     // Add a new question

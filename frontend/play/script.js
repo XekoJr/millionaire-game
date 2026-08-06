@@ -67,11 +67,12 @@ function linkFetch(num) {
 const container = document.getElementById('game-display');
 
 //---OBJETO PERGUNTA
-function objQuestion(authorQ, difficultyQ, optionsQ, questionQ) {
+function objQuestion(authorQ, difficultyQ, optionsQ, questionQ, idQ) {
     this.question = questionQ;
     this.options = optionsQ;
     this.difficulty = difficultyQ;
     this.author = authorQ;
+    this.id = idQ;
 }
 
 let countdown;
@@ -137,7 +138,7 @@ function questionGame(questions) {
             // Adicionar li a ul
             optionsList.appendChild(answerLi);
 
-            answerLi.addEventListener('click', function () {
+            answerLi.addEventListener('click', async function () {
 
                 if (optionsList.classList.contains('answered')) {
                     return;
@@ -157,9 +158,26 @@ function questionGame(questions) {
 
                 clearInterval(countdown);
 
+                optionsList.querySelectorAll('li').forEach(li => {
+                    li.style.pointerEvents = 'none';
+                });
+
+                let result;
+                try {
+                    const res = await fetch(BASE_URL + '/questions/' + question.id + '/answer', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ optionIndex: index }),
+                    });
+                    result = await res.json();
+                } catch (error) {
+                    console.error('Erro ao verificar resposta:', error);
+                    result = { correct: false, correctIndex: -1 };
+                }
+
                 setTimeout(function () {
 
-                    if (option.correct) {
+                    if (result.correct) {
 
                         if (question.difficulty === 15) {
 
@@ -189,24 +207,14 @@ function questionGame(questions) {
                         endGame.style.display = 'block';
                         finalLevel = true;
 
-                        question.options.forEach((option, index) => {
-
-                            if (option.correct) {
-
-                                const optionItems = optionsList.querySelectorAll('li');
-                                optionItems[index].classList.add('answer-correct');
-
-                            }
-
-                        });
+                        const optionItems = optionsList.querySelectorAll('li');
+                        if (result.correctIndex >= 0 && optionItems[result.correctIndex]) {
+                            optionItems[result.correctIndex].classList.add('answer-correct');
+                        }
 
                     }
 
                 }, 5000);
-
-                optionsList.querySelectorAll('li').forEach(li => {
-                    li.style.pointerEvents = 'none';
-                });
 
             });
 
@@ -217,14 +225,6 @@ function questionGame(questions) {
 
     });
 
-}
-
-//SHUFFLE OPS
-function shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
 }
 
 //TIMMER 1m PARA RESPONDER
@@ -289,7 +289,8 @@ function fetchQuestion(num, rand) {
                 questionData.author,
                 questionData.difficulty,
                 questionData.options,
-                questionData.question
+                questionData.question,
+                questionData.id
             ));
 
             if (rand === false) {
@@ -322,50 +323,44 @@ function lvlTable(i) {
 
 }
 
+// Lifelines ask the server which options to eliminate — the client no
+// longer holds the correct-answer flag at all, so it can't compute this
+// itself anymore.
+async function eliminateOptions(type) {
+    const optionsList = document.querySelector('.questions-all');
+    if (!optionsList || !currentQuestion) return;
+
+    try {
+        const res = await fetch(BASE_URL + '/questions/' + currentQuestion.id + '/hint', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type }),
+        });
+        const { eliminate } = await res.json();
+        const items = optionsList.querySelectorAll('li');
+        (eliminate || []).forEach(index => {
+            if (items[index]) {
+                items[index].classList.add('answer-dnf');
+                items[index].style.pointerEvents = 'none';
+            }
+        });
+    } catch (error) {
+        console.error('Erro ao obter dica:', error);
+    }
+}
+
 //50:50 HELP
 function useFiftyFifty() {
-    const optionsList = document.querySelector('.questions-all');
-    if (!optionsList) return;
-
-    const options = Array.from(optionsList.querySelectorAll('li'));
-    const wrongOptions = options.filter(option => {
-        const optionText = option.querySelector('h4').textContent;
-        return currentQuestion.options.some(opt => opt.answer === optionText && !opt.correct);
-    });
-
-    shuffleArray(wrongOptions);
-
-    if (wrongOptions.length > 1) {
-        wrongOptions[0].classList.add('answer-dnf');
-        wrongOptions[0].style.pointerEvents = 'none';
-        wrongOptions[1].classList.add('answer-dnf');
-        wrongOptions[1].style.pointerEvents = 'none';
-    }
-
     fifty.style.pointerEvents = 'none';
     fifty.classList.add('used');
+    eliminateOptions('fifty');
 }
 
 //PHONE HELP
 function usePhone() {
-    const optionsList = document.querySelector('.questions-all');
-    if (!optionsList) return;
-
-    const options = Array.from(optionsList.querySelectorAll('li'));
-    options.forEach(option => {
-
-        const optionText = option.querySelector('h4').textContent;
-        const isCorrect = currentQuestion.options.some(opt => opt.answer === optionText && opt.correct);
-
-        if (!isCorrect) {
-            option.classList.add('answer-dnf');
-            option.style.pointerEvents = 'none';
-        }
-
-    });
-
     phone.style.pointerEvents = 'none';
     phone.classList.add('used');
+    eliminateOptions('phone');
 }
 
 //---SAVE THE DATA LOCALLY

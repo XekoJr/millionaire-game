@@ -231,29 +231,6 @@ function updQuestionsList(questions) {
 
         childOne.appendChild(optionsList);
 
-        const childTwo = document.createElement('div');
-        childTwo.classList.add('question-buttons');
-        questionBox.appendChild(childTwo);
-
-        const showCorrect = document.createElement('button');
-        showCorrect.textContent = "Correct Option"
-        showCorrect.classList.add('showCorrect');
-
-        showCorrect.addEventListener('click', () => {
-
-            question.options.forEach((option, index) => {
-
-                if (option.correct) {
-                    const optionItems = optionsList.querySelectorAll('li');
-                    optionItems[index].classList.add('li-correct');
-                }
-
-            });
-
-        });
-
-        childTwo.appendChild(showCorrect);
-
         container.appendChild(questionBox);
 
     });
