@@ -1,5 +1,9 @@
 FROM php:8.5.12-apache
 
+# Hide PHP/Apache versions from response headers and error pages
+RUN echo "expose_php = Off" > /usr/local/etc/php/conf.d/zz-hardening.ini \
+    && sed -ri -e 's/^ServerTokens .*/ServerTokens Prod/' -e 's/^ServerSignature .*/ServerSignature Off/' /etc/apache2/conf-available/security.conf
+
 # Laravel's runtime PHP extensions + build deps for pdo_sqlite/zip
 RUN apt-get update && apt-get install -y \
         libsqlite3-dev \
