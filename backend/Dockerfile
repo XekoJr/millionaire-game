@@ -1,4 +1,4 @@
-FROM php:8.2-apache
+FROM php:8.5.12-apache
 
 # Laravel's runtime PHP extensions + build deps for pdo_sqlite/zip
 RUN apt-get update && apt-get install -y \
